@@ -23,12 +23,12 @@ module complex_mult
 	parameter INPUT_BUF = "ON",
 	parameter OUTPUT_BUF = "ON"
 )(
-	input wire clk;               // Clock
-	input wire ab_valid;
-	input wire signed [WIDTH-1:0] 	    ar, ai; // 1st inputs real and imaginary parts
-	input wire signed [WIDTH-1:0] 	    br, bi; // 2nd inputs real and imaginary parts
-	output reg p_valid;
-	output reg signed [WIDTH+WIDTH:0] pr, pi; // output signal
+	input wire clk,               // Clock
+	input wire ab_valid,
+	input wire signed [WIDTH-1:0] 	    ar, ai, // 1st inputs real and imaginary parts
+	input wire signed [WIDTH-1:0] 	    br, bi, // 2nd inputs real and imaginary parts
+	output reg p_valid,
+	output reg signed [WIDTH+WIDTH:0] pr, pi // output signal
 
     );
 
@@ -39,17 +39,17 @@ reg signed [WIDTH-1:0] ar_buf,ai_buf,br_buf,bi_buf;
 	generate if ( INPUT_BUF == "ON" )
 
       always@(posedge clk)
-	  	{ ab_valid_buf,ar_buf,ai_buf } <= { ab_valid,ar,ai };
+	  	{ ab_valid_buf,ar_buf,ai_buf,br_buf,bi_buf } <= { ab_valid,ar,ai,br,bi };
 
    else if (INPUT_BUF == "OFF")
 
       always@(*)
-	  	{ ab_valid_buf,ar_buf,ai_buf } = { ab_valid,ar,ai };
+	  	{ ab_valid_buf,ar_buf,ai_buf,br_buf,bi_buf } = { ab_valid,ar,ai,br,bi };
 
    endgenerate
 /* end of input buffer */
 
-reg common_En;
+reg booth_mult_En;
 reg signed [WIDTH:0] common_M,common_Q,real_mult1,real_mult2,imag_mult1,imag_mult2;
 
 always @ (posedge clk) begin
@@ -72,19 +72,19 @@ wire signed [2*(WIDTH+1)-1:0] common_Product,real_Product,imag_Product;
 Booth_Multiplier_inside_cmult #(
 	.WIDTH(WIDTH+1)                // Width = WIDTH: multiplicand & multiplier
 )booth_mult0(
-    .Rst_n(1'b0),
+    .Rst_n(1'b1),
     .Clk(clk),
     .En(booth_mult_En),
     .M(common_M),
     .Q(common_Q),
-    .Valid(common_Valid),
+    .Valid(booth_mult_Valid),
     .Product(common_Product)
 );
 
 Booth_Multiplier_inside_cmult #(
 	.WIDTH(WIDTH+1)                // Width = WIDTH: multiplicand & multiplier
 )booth_mult1(
-    .Rst_n(1'b0),
+    .Rst_n(1'b1),
     .Clk(clk),
     .En(booth_mult_En),
     .M(real_mult1),
@@ -96,7 +96,7 @@ Booth_Multiplier_inside_cmult #(
 Booth_Multiplier_inside_cmult #(
 	.WIDTH(WIDTH+1)                // Width = WIDTH: multiplicand & multiplier
 )booth_mult2(
-    .Rst_n(1'b0),
+    .Rst_n(1'b1),
     .Clk(clk),
     .En(booth_mult_En),
     .M(imag_mult1),
@@ -110,7 +110,7 @@ Booth_Multiplier_inside_cmult #(
 	generate if ( OUTPUT_BUF == "ON" )
 
       always@(posedge clk)begin
-	  	p_valid <= common_Valid;
+	  	p_valid <= booth_mult_Valid;
 		pr <= real_Product + common_Product;
 		pi <= imag_Product + common_Product;
 	  end
@@ -118,7 +118,7 @@ Booth_Multiplier_inside_cmult #(
    else if (OUTPUT_BUF == "OFF")
 
 	   always@(*)begin
-		 p_valid = common_Valid;
+		 p_valid = booth_mult_Valid;
 		 pr = real_Product + common_Product;
 		 pi = imag_Product + common_Product;
 	   end
@@ -157,7 +157,7 @@ module Booth_Multiplier_inside_cmult #(
   generate
       for(vari = 0;vari < WIDTH; vari = vari+1) begin: Booth
           Booth_Shift_inside_mult#(
-            .pN(pN)
+            .WIDTH(WIDTH)
           )inst_booths(
             .Clk(Clk),
             .Rst_n(Rst_n),
@@ -183,7 +183,7 @@ module Booth_Multiplier_inside_cmult #(
     en_shift <= {en_shift[WIDTH-2:0],En};
     if (en_shift[WIDTH-1] == 1'b1)begin
       Valid <= 1;
-      Product <= o_temp[WIDTH-1][(2**(pN+1) - 1):0];
+      Product <= o_temp[WIDTH-1][(2*WIDTH - 1):0];
     end
     else begin
       Valid <= 0;
